@@ -1,0 +1,80 @@
+POLÍTICA DE PRIVACIDAD — CIUDADANÍA USA
+Última actualización: junio 2025
+
+Esta Política de Privacidad describe cómo la aplicación "Ciudadanía USA"
+(en adelante "la App") maneja la información de sus usuarios.
+
+1. INFORMACIÓN QUE RECOPILAMOS
+──────────────────────────────
+La App NO recopila ningún dato personal. Específicamente:
+
+• No solicitamos nombre, email, teléfono ni ningún dato de identificación.
+• No requerimos cuenta de usuario ni inicio de sesión.
+• No accedemos a la cámara, micrófono, contactos, ubicación ni ningún
+  sensor o permiso especial del dispositivo.
+• No utilizamos cookies ni tecnologías de rastreo de ningún tipo.
+• No enviamos ningún dato a servidores externos.
+• La App funciona completamente sin conexión a internet (offline).
+
+2. USO DE LA INFORMACIÓN
+─────────────────────────
+Al no recopilar datos, no existe ningún uso, procesamiento, venta
+ni transferencia de información del usuario a ningún tercero.
+
+3. ALMACENAMIENTO LOCAL
+────────────────────────
+La App puede guardar localmente en tu dispositivo:
+• Tu progreso de práctica (preguntas respondidas, puntajes)
+• Preferencias de configuración (idioma, modo)
+
+Esta información permanece únicamente en tu dispositivo y nunca
+es transmitida fuera del mismo. Puedes borrarla en cualquier momento
+desinstalando la App.
+
+4. SERVICIOS DE TERCEROS
+──────────────────────────
+La App no integra servicios de publicidad, analítica, ni redes sociales.
+No utilizamos: Google Analytics, Firebase, Facebook SDK, ni ningún
+otro SDK de terceros que recopile datos.
+
+5. PRIVACIDAD DE MENORES
+──────────────────────────
+La App es apta para todas las edades. Al no recopilar ningún dato
+personal, no existe ningún riesgo de privacidad para menores de edad.
+
+6. CAMBIOS A ESTA POLÍTICA
+───────────────────────────
+Si actualizamos esta política, lo notificaremos en las notas de la
+actualización de la App en la tienda correspondiente. La fecha de
+"Última actualización" al inicio de este documento será modificada.
+
+7. CONTACTO
+────────────
+Si tienes preguntas sobre esta política de privacidad, contáctanos en:
+Email: [TU EMAIL DE CONTACTO]
+Sitio web: [TU SITIO WEB]
+
+──────────────────────────────────────────────────────────────────────
+INSTRUCCIONES PARA PUBLICAR ESTA POLÍTICA:
+──────────────────────────────────────────────────────────────────────
+Ambas tiendas (Google Play y App Store) REQUIEREN una URL pública
+para la política de privacidad. Opciones gratuitas para hospedarla:
+
+Opción A — GitHub Pages (recomendado):
+  1. Crea un repositorio en GitHub llamado "privacy-policy"
+  2. Sube este texto como index.html o index.md
+  3. Activa GitHub Pages en Settings → Pages
+  4. URL resultante: https://[tu-usuario].github.io/privacy-policy/
+
+Opción B — Google Sites:
+  1. Crea una página en sites.google.com
+  2. Pega el texto de esta política
+  3. Publica la página y copia la URL
+
+Opción C — Notion (si ya usas Notion):
+  1. Crea una página pública en Notion
+  2. Pega la política, activa "Share to web"
+  3. Usa esa URL
+
+Reemplaza los marcadores [TU EMAIL] y [TU SITIO WEB] antes de publicar.
+──────────────────────────────────────────────────────────────────────
