@@ -41,6 +41,46 @@ Open `http://localhost:3000` for the marketing page, or jump straight to
 Other scripts: `npm run build`, `npm run lint`, `npm run db:studio` (Prisma's
 data browser).
 
+## Deploying
+
+`npm run build` produces a standard Next.js server (not a static export) — it
+needs somewhere that runs `next start` as a long-lived Node process, not a
+static host. `npm start` runs `prisma migrate deploy` before `next start`, so
+the schema is applied automatically on every boot.
+
+**The database matters here.** This app ships with SQLite (a single file on
+disk) so it runs with zero external services locally. That's fine on a host
+with persistent disk (Railway, Render, Fly.io, a VPS) but **not** on
+serverless/edge platforms (Vercel, Netlify Functions, Cloudflare Workers) —
+those run each request on a fresh, non-shared filesystem, so writes (an
+inventory or sales import) wouldn't reliably persist. To deploy on Vercel,
+swap the datasource for a real Postgres database first (Prisma's own
+[Prisma Postgres](https://www.prisma.io/postgres), Neon, or Supabase all
+work — see the `prisma-postgres-setup` skill in `.claude/skills/` for the
+Prisma Postgres path) and swap `@prisma/adapter-better-sqlite3` for
+`@prisma/adapter-pg` (or the equivalent for whichever provider you pick).
+
+**Recommended: Railway (works with the current SQLite setup, no code changes)**
+
+1. [railway.app](https://railway.app) → New Project → **Deploy from GitHub repo**
+   → pick `arleysescalona-byte/privacy-policy`.
+2. In the service's Settings, set **Root Directory** to `app` (the Next.js
+   project lives in a subdirectory of this repo).
+3. Add a **Volume**, mounted at `/data`.
+4. Add an environment variable `DATABASE_PATH` = `/data/prod.db` (this is
+   what `prisma.config.ts` reads — without it, the app falls back to
+   `prisma/dev.db`, which lives in the ephemeral build filesystem and gets
+   wiped on every redeploy).
+5. Deploy. Railway auto-detects Next.js, runs `npm install` (which triggers
+   `postinstall: prisma generate`), `npm run build`, then `npm start` — which
+   applies migrations and boots the server.
+6. Once it's up, open a shell for the service (Railway's "Run a command" /
+   shell tab) and run `npm run db:seed` once, to load the demo club. Re-runs
+   are safe — the seed script skips if the club already exists.
+
+Every push to this branch redeploys automatically once the service is
+connected.
+
 ## How pricing works
 
 Nothing is priced by hand. Each `InventoryItem` has a `cost` and a `category`.
