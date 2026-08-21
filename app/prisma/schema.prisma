@@ -1,0 +1,190 @@
+// Beverage Costing & Wine Pricing SaaS — data model
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// A private club (tenant). Everything else is scoped to a Club.
+model Club {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  city      String?
+  state     String?
+  currency  String   @default("USD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Menu branding / identity
+  branding MenuBranding?
+
+  markupBands    MarkupBand[]
+  inventoryItems InventoryItem[]
+  salesRecords   SalesRecord[]
+  importBatches  ImportBatch[]
+}
+
+/// Visual identity applied to generated menus for a club.
+model MenuBranding {
+  id       String @id @default(cuid())
+  clubId   String @unique
+  club     Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  logoDataUrl     String? // small logos stored as data: URL for simplicity (MVP, no object storage)
+  primaryColor    String  @default("#1a3c5e")
+  secondaryColor  String  @default("#c5a253")
+  backgroundColor String  @default("#faf8f3")
+  fontFamily      String  @default("'Playfair Display', Georgia, serif")
+  headerText      String  @default("Wine & Beverage List")
+  footerText      String  @default("")
+
+  updatedAt DateTime @updatedAt
+}
+
+/// A configurable markup rule: applies to items of a category whose cost
+/// falls within [minCost, maxCost). Bands let a club say e.g. "wine bottles
+/// costing $10-$25 get 3.0x markup" without touching code.
+model MarkupBand {
+  id       String @id @default(cuid())
+  clubId   String
+  club     Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  label    String
+  category Category
+  unitType UnitType
+
+  minCost Float
+  maxCost Float? // null = unbounded upper range
+
+  markupType  MarkupType
+  markupValue Float // multiplier (e.g. 3.0) or percent (e.g. 65 for 65%)
+
+  rounding RoundingRule @default(NEAREST_050)
+
+  priority  Int      @default(0) // higher wins when ranges overlap
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clubId, category, unitType])
+}
+
+/// One purchasable/sellable beverage item, usually imported from
+/// Scannabar / POS / a club's cost export.
+model InventoryItem {
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  name       String
+  category   Category
+  subcategory String? // varietal, spirit type, beer style, etc.
+  supplier   String?
+  sku        String?
+  vintage    String?
+
+  unitType       UnitType // BOTTLE, CAN, KEG, EACH — the purchasing unit
+  cost           Float // cost per purchasing unit
+  bottleSizeMl   Int?    @default(750)
+  glassesPerBottle Int?  @default(5) // used for by-the-glass wine costing
+
+  // Manual overrides — a club can hand-tune a computed price or hide/feature
+  // an item on the printed menu without touching the pricing engine.
+  overrideBottlePrice Float?
+  overrideGlassPrice  Float?
+  menuDescription     String?
+  isFeatured          Boolean @default(false)
+  isActive            Boolean @default(true)
+  sortOrder           Int     @default(0)
+
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  salesRecords SalesRecord[]
+
+  @@index([clubId, category])
+}
+
+/// Tracks a single upload so a club can see what was imported and when.
+model ImportBatch {
+  id       String   @id @default(cuid())
+  clubId   String
+  club     Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  type      ImportType
+  filename  String
+  rowCount  Int
+  createdAt DateTime @default(now())
+
+  inventoryItems InventoryItem[]
+}
+
+/// Monthly units-sold record, used to compute revenue/COGS/margin for the
+/// F&B financial analysis. Cost is snapshotted at time of import so later
+/// cost changes don't retroactively distort historical months.
+model SalesRecord {
+  id     String @id @default(cuid())
+  clubId String
+  club   Club   @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  itemId String?
+  item   InventoryItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  itemNameSnapshot String // preserved even if the item is later deleted/renamed
+  category         Category
+  month            DateTime // normalized to the 1st of the month
+
+  quantitySold    Int
+  unitType        UnitType
+  revenuePerUnit  Float // actual or suggested price at time of sale
+  costPerUnit     Float // snapshot of cost at time of sale
+
+  createdAt DateTime @default(now())
+
+  @@index([clubId, month])
+}
+
+enum Category {
+  WINE
+  SPIRITS
+  BEER
+  COCKTAIL
+  NON_ALCOHOLIC
+  OTHER
+}
+
+enum UnitType {
+  BOTTLE
+  GLASS
+  CAN
+  KEG
+  EACH
+}
+
+enum MarkupType {
+  MULTIPLIER // suggestedPrice = cost * markupValue
+  MARGIN_PERCENT // suggestedPrice = cost / (1 - markupValue/100)
+  MARKUP_PERCENT // suggestedPrice = cost * (1 + markupValue/100)
+}
+
+enum RoundingRule {
+  NONE
+  NEAREST_025
+  NEAREST_050
+  NEAREST_1
+  CHARM_95 // round up to nearest whole number minus .05
+  CHARM_99 // round up to nearest whole number minus .01
+}
+
+enum ImportType {
+  INVENTORY
+  SALES
+}
