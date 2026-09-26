@@ -60,7 +60,15 @@
   .house-card .hname { font-family: var(--display); font-size: 22px; line-height: 1.1; }
   .house-card .motto { font-family: var(--italic); font-style: italic; color: var(--gold); font-size: 15px; }
   .house-card .perk { color: var(--muted); font-size: 14px; }
-  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; padding: 16px 0 0; border-top: 1px solid var(--line); }
+  .step { display: grid; gap: 10px; }
+  .diff { display: flex; flex-wrap: wrap; gap: 10px; }
+  .diff label { position: relative; flex: 1 1 170px; max-width: 300px; display: grid; gap: 2px; padding: 12px 14px; border-radius: 6px; cursor: pointer; background: var(--panel); border: 1px solid var(--line); }
+  .diff input { position: absolute; opacity: 0; pointer-events: none; }
+  .diff label:has(input:checked) { border-color: var(--gold); background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--gold); }
+  .diff label:focus-within { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .diff b { font-family: var(--display); font-weight: 400; font-size: 20px; }
+  .diff span { font-size: 14px; color: var(--muted); }
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 24px; padding: 16px 0 0; border-top: 1px solid var(--line); }
   .rules div { font-size: 15px; color: var(--muted); max-width: 40ch; }
   .rules b { display: block; color: var(--ink); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 2px; }
 
@@ -152,13 +160,20 @@
   </header>
 
   <section class="intro" id="intro">
-    <h2>Elige tu casa</h2>
-    <div class="houses" id="houses"></div>
+    <div class="step">
+      <h2>1. Elige la dificultad</h2>
+      <div class="diff" id="diff" role="radiogroup" aria-label="Dificultad"></div>
+    </div>
+    <div class="step">
+      <h2>2. Elige tu casa</h2>
+      <div class="houses" id="houses"></div>
+    </div>
     <div class="rules">
-      <div><b>Objetivo</b>Controla Desembarco del Rey y al menos 9 de las 16 regiones al terminar una acción.</div>
+      <div><b>Objetivo</b>Controla Desembarco del Rey y al menos 10 de las 18 regiones al terminar una acción.</div>
       <div><b>Tu turno</b>Toca una región tuya, luego una vecina resaltada: si es tuya mueves tropas, si no, atacas con todas menos una.</div>
-      <div><b>Oro</b>Cada región rinde oro al inicio del turno. Gástalo en reclutar 2 soldados en la región que elijas.</div>
-      <div><b>El invierno</b>En el turno 9 los Otros cruzan desde Más Allá del Muro. Si toman Desembarco, todos pierden.</div>
+      <div><b>Oro</b>Cada región rinde oro al inicio del turno. Gástalo en reclutar soldados en la región que elijas.</div>
+      <div><b>Dragones</b>Los Targaryen empiezan con 3. Vuelan con el ejército, queman 1 defensor cada uno antes del choque y suman a los dados. Un escorpión puede abatirlos si el ataque fracasa.</div>
+      <div><b>El invierno</b>Los Otros cruzan desde Más Allá del Muro (turno 8 a 11 según la dificultad). Si capturan un dragón, lo convierten en dragón de hielo. Si toman Desembarco, todos pierden.</div>
     </div>
   </section>
 
@@ -178,23 +193,33 @@
 
 <script>
 (() => {
-  const GOAL = 9;
-  const WINTER_TURN = 9;
+  const GOAL = 10;
+  const HATCH_COST = 10;
+  const MAX_DRAGONS = 3;
+  const DRAGON_NAMES = ['Drogon', 'Rhaegal', 'Viserion', 'Balerion', 'Meraxes', 'Vhagar', 'Syrax', 'Caraxes', 'Vermithor'];
+
+  const DIFF = {
+    facil:   { label: 'Fácil',   desc: 'Rivales tímidos y pobres. Empiezas con 6 de oro. El invierno llega en el turno 11.', aiGold: 0.6, margin: 3, startGold: 6, otros: 8,  otrosGrow: 3, winter: 11 },
+    normal:  { label: 'Normal',  desc: 'Rivales equilibrados. Empiezas con 2 de oro. El invierno llega en el turno 9.',      aiGold: 1,   margin: 2, startGold: 2, otros: 12, otrosGrow: 4, winter: 9 },
+    dificil: { label: 'Difícil', desc: 'Rivales ricos y agresivos. Empiezas sin oro. El invierno llega en el turno 8.',       aiGold: 1.35, margin: 1, startGold: 0, otros: 16, otrosGrow: 5, winter: 8 },
+  };
 
   const R = {
     mas_alla:      { name: 'Más Allá del Muro',   x: 200, y: 72,  inc: 1, neu: 3 },
     muro:          { name: 'Castillo Negro',      x: 200, y: 150, inc: 1, neu: 4, fort: 1 },
     fuerte_terror: { name: 'Fuerte Terror',       x: 285, y: 215, inc: 1, neu: 3 },
     invernalia:    { name: 'Invernalia',          x: 165, y: 240, inc: 3, neu: 3 },
-    foso_cailin:   { name: 'Foso Cailin',         x: 185, y: 325, inc: 1, neu: 3, fort: 1 },
+    foso_cailin:   { name: 'Foso Cailin',         x: 185, y: 318, inc: 1, neu: 3, fort: 1 },
+    gemelos:       { name: 'Los Gemelos',         x: 240, y: 350, inc: 2, neu: 3, fort: 1 },
     islas_hierro:  { name: 'Islas del Hierro',    x: 52,  y: 392, inc: 2, neu: 3 },
-    aguasdulces:   { name: 'Aguasdulces',         x: 185, y: 410, inc: 2, neu: 4 },
-    nido_aguilas:  { name: 'Nido de Águilas',     x: 305, y: 375, inc: 2, neu: 5, fort: 1 },
+    aguasdulces:   { name: 'Aguasdulces',         x: 172, y: 405, inc: 2, neu: 4 },
+    nido_aguilas:  { name: 'Nido de Águilas',     x: 318, y: 382, inc: 2, neu: 5, fort: 1 },
+    harrenhal:     { name: 'Harrenhal',           x: 205, y: 470, inc: 2, neu: 4, fort: 1 },
     roca_casterly: { name: 'Roca Casterly',       x: 92,  y: 482, inc: 3, neu: 3 },
-    desembarco:    { name: 'Desembarco del Rey',  x: 262, y: 478, inc: 5, neu: 6, fort: 1 },
+    desembarco:    { name: 'Desembarco del Rey',  x: 272, y: 488, inc: 5, neu: 6, fort: 1 },
     rocadragon:    { name: 'Rocadragón',          x: 352, y: 445, inc: 2, neu: 3 },
     altojardin:    { name: 'Altojardín',          x: 135, y: 585, inc: 3, neu: 3 },
-    bastion:       { name: 'Bastión de Tormentas',x: 290, y: 572, inc: 2, neu: 3 },
+    bastion:       { name: 'Bastión de Tormentas',x: 290, y: 580, inc: 2, neu: 3 },
     antigua:       { name: 'Antigua',             x: 78,  y: 655, inc: 2, neu: 3 },
     paso_principe: { name: 'Paso del Príncipe',   x: 195, y: 660, inc: 1, neu: 2 },
     lanza_sol:     { name: 'Lanza del Sol',       x: 305, y: 705, inc: 3, neu: 3 },
@@ -202,11 +227,14 @@
   const IDS = Object.keys(R);
   const EDGES = [
     ['mas_alla','muro'], ['muro','invernalia'], ['muro','fuerte_terror'], ['invernalia','fuerte_terror'],
-    ['invernalia','foso_cailin'], ['fuerte_terror','foso_cailin'], ['foso_cailin','aguasdulces'],
-    ['foso_cailin','nido_aguilas'], ['foso_cailin','islas_hierro',1], ['islas_hierro','aguasdulces',1],
-    ['islas_hierro','roca_casterly',1], ['aguasdulces','nido_aguilas'], ['aguasdulces','roca_casterly'],
-    ['aguasdulces','desembarco'], ['aguasdulces','altojardin'], ['nido_aguilas','desembarco'],
-    ['nido_aguilas','rocadragon',1], ['rocadragon','desembarco',1], ['rocadragon','bastion',1],
+    ['invernalia','foso_cailin'], ['fuerte_terror','foso_cailin'], ['fuerte_terror','gemelos'],
+    ['foso_cailin','gemelos'], ['foso_cailin','aguasdulces'], ['foso_cailin','islas_hierro',1],
+    ['gemelos','aguasdulces'], ['gemelos','nido_aguilas'],
+    ['islas_hierro','aguasdulces',1], ['islas_hierro','roca_casterly',1],
+    ['aguasdulces','roca_casterly'], ['aguasdulces','harrenhal'], ['aguasdulces','altojardin'],
+    ['nido_aguilas','desembarco'], ['nido_aguilas','rocadragon',1],
+    ['harrenhal','desembarco'], ['harrenhal','altojardin'], ['harrenhal','roca_casterly'],
+    ['rocadragon','desembarco',1], ['rocadragon','bastion',1],
     ['roca_casterly','altojardin'], ['desembarco','altojardin'], ['desembarco','bastion'],
     ['altojardin','antigua'], ['altojardin','paso_principe'], ['altojardin','bastion'],
     ['bastion','paso_principe'], ['bastion','lanza_sol'], ['antigua','paso_principe'], ['paso_principe','lanza_sol'],
@@ -218,13 +246,16 @@
   const NORTH = ['mas_alla', 'muro', 'fuerte_terror', 'invernalia', 'foso_cailin'];
 
   const HOUSES = {
-    stark:     { name: 'Stark',     seat: 'invernalia',    color: '#b9c4ca', stroke: '#eef3f5', text: '#10181b', sigil: 'Lobo huargo',      motto: 'Se acerca el invierno',        perk: '+1 en defensa. El invierno no desgasta a tus ejércitos en el Norte.' },
-    lannister: { name: 'Lannister', seat: 'roca_casterly', color: '#b8322a', stroke: '#f0a33a', text: '#fff4e0', sigil: 'León',             motto: '¡Oye mi rugido!',              perk: '+2 de oro cada turno. Un Lannister siempre paga sus deudas.' },
-    targaryen: { name: 'Targaryen', seat: 'rocadragon',    color: '#221316', stroke: '#e24b2b', text: '#ff8d6c', sigil: 'Dragón tricéfalo', motto: 'Fuego y sangre',               perk: 'Dragones: +2 a tu dado más alto al atacar.' },
-    greyjoy:   { name: 'Greyjoy',   seat: 'islas_hierro',  color: '#3d6878', stroke: '#d6b35c', text: '#ffffff', sigil: 'Kraken',           motto: 'Nosotros no sembramos',        perk: 'Flota de Hierro: desde la costa oeste atacas cualquier región de esa costa.' },
-    tyrell:    { name: 'Tyrell',    seat: 'altojardin',    color: '#5a9c48', stroke: '#d9e98a', text: '#ffffff', sigil: 'Rosa dorada',      motto: 'Crecer fuertes',               perk: 'Reclutar te cuesta 2 de oro en lugar de 3.' },
-    martell:   { name: 'Martell',   seat: 'lanza_sol',     color: '#e0822b', stroke: '#ffd08a', text: '#1a0f05', sigil: 'Sol y lanza',      motto: 'Nunca doblegado, nunca roto',  perk: '+2 en defensa dentro de Dorne.' },
-    baratheon: { name: 'Baratheon', seat: 'bastion',       color: '#e6cc45', stroke: '#fff3a8', text: '#1a1505', sigil: 'Venado coronado',  motto: 'Nuestra es la furia',          perk: '+1 a tu dado más alto al atacar.' },
+    stark:     { name: 'Stark',     seat: 'invernalia',    color: '#b9c4ca', stroke: '#eef3f5', text: '#10181b', sigil: 'Lobo huargo',      motto: 'Se acerca el invierno',         perk: '+1 en defensa. El invierno no desgasta a tus ejércitos en el Norte.' },
+    bolton:    { name: 'Bolton',    seat: 'fuerte_terror', color: '#c8798c', stroke: '#3a141d', text: '#1e0a0f', sigil: 'Hombre desollado', motto: 'Nuestras hojas están afiladas', perk: '+1 al atacar. Cada región que conquistas te paga 2 de oro.' },
+    arryn:     { name: 'Arryn',     seat: 'nido_aguilas',  color: '#9cc3e4', stroke: '#ffffff', text: '#0e2233', sigil: 'Halcón y luna',    motto: 'Tan alto como el honor',        perk: '+1 en defensa en todas partes y +3 en Nido de Águilas.' },
+    tully:     { name: 'Tully',     seat: 'aguasdulces',   color: '#2f5f9e', stroke: '#e0565a', text: '#ffffff', sigil: 'Trucha saltarina', motto: 'Familia, deber, honor',         perk: 'Cada leva te da 3 soldados en lugar de 2.' },
+    lannister: { name: 'Lannister', seat: 'roca_casterly', color: '#b8322a', stroke: '#f0a33a', text: '#fff4e0', sigil: 'León',             motto: '¡Oye mi rugido!',               perk: '+2 de oro cada turno. Un Lannister siempre paga sus deudas.' },
+    targaryen: { name: 'Targaryen', seat: 'rocadragon',    color: '#221316', stroke: '#e24b2b', text: '#ff8d6c', sigil: 'Dragón tricéfalo', motto: 'Fuego y sangre',                perk: `Empiezas con 3 dragones. Puedes eclosionar huevos por ${HATCH_COST} de oro (máximo ${MAX_DRAGONS} vivos).` },
+    greyjoy:   { name: 'Greyjoy',   seat: 'islas_hierro',  color: '#3d6878', stroke: '#d6b35c', text: '#ffffff', sigil: 'Kraken',           motto: 'Nosotros no sembramos',         perk: 'Flota de Hierro: desde la costa oeste atacas cualquier región de esa costa.' },
+    tyrell:    { name: 'Tyrell',    seat: 'altojardin',    color: '#5a9c48', stroke: '#d9e98a', text: '#ffffff', sigil: 'Rosa dorada',      motto: 'Crecer fuertes',                perk: 'Reclutar te cuesta 2 de oro en lugar de 3.' },
+    martell:   { name: 'Martell',   seat: 'lanza_sol',     color: '#e0822b', stroke: '#ffd08a', text: '#1a0f05', sigil: 'Sol y lanza',      motto: 'Nunca doblegado, nunca roto',   perk: '+2 en defensa dentro de Dorne.' },
+    baratheon: { name: 'Baratheon', seat: 'bastion',       color: '#e6cc45', stroke: '#fff3a8', text: '#1a1505', sigil: 'Venado coronado',  motto: 'Nuestra es la furia',           perk: '+1 a tu dado más alto al atacar.' },
   };
   const OTHER = {
     neutral: { name: 'Señores menores', color: '#4c5752', stroke: '#7d8a84', text: '#ece6d6' },
@@ -233,16 +264,23 @@
   const H = id => HOUSES[id] || OTHER[id];
 
   let S = null; // estado de la partida
+  let chosenDiff = 'normal';
+  try { const d = localStorage.getItem('westeros-diff'); if (DIFF[d]) chosenDiff = d; } catch (e) {}
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const d6 = () => 1 + Math.floor(Math.random() * 6);
   const rollN = n => Array.from({ length: n }, d6).sort((a, b) => b - a);
+  const cfg = () => DIFF[S.diff];
   const owned = h => IDS.filter(id => S.regions[id].owner === h);
   const alive = h => IDS.some(id => S.regions[id].owner === h);
   const troopsOf = h => owned(h).reduce((s, id) => s + S.regions[id].troops, 0);
+  const dragonsOf = h => owned(h).reduce((s, id) => s + S.regions[id].dragons.length, 0);
   const income = h => owned(h).reduce((s, id) => s + R[id].inc, 0) + (h === 'lannister' ? 2 : 0);
   const cost = h => (h === 'tyrell' ? 2 : 3);
+  const levy = h => (h === 'tully' ? 3 : 2);
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const casa = h => h === S.player ? 'ti' : HOUSES[h] ? 'la Casa ' + H(h).name : H(h).name;
 
   function shield(h, cls = 'shield') {
     const c = H(h);
@@ -255,23 +293,27 @@
   }
 
   // ---------- Combate ----------
-  function atkBonus(h) { return h === 'targaryen' ? 2 : h === 'baratheon' || h === 'otros' ? 1 : 0; }
+  function atkBonus(h) { return h === 'baratheon' || h === 'bolton' || h === 'otros' ? 1 : 0; }
   function defBonus(h, rid) {
     let b = R[rid].fort || 0;
     if (h === 'stark' || h === 'otros') b += 1;
+    if (h === 'arryn') b += rid === 'nido_aguilas' ? 3 : 1;
     if (h === 'martell' && DORNE.includes(rid)) b += 2;
     return b;
   }
-  function battle(a, d, ah, dh, rid) {
+  function battle(a, d, ah, dh, rid, ad, dd) {
     const start = { a, d };
+    const burned = Math.min(d, ad);
+    d -= burned;
     while (a > 0 && d > 0) {
       const ar = rollN(Math.min(3, a)), dr = rollN(Math.min(2, d));
-      ar[0] += atkBonus(ah); dr[0] += defBonus(dh, rid);
+      ar[0] += atkBonus(ah) + Math.min(2, ad);
+      dr[0] += defBonus(dh, rid) + Math.min(2, dd);
       for (let i = 0; i < Math.min(ar.length, dr.length); i++) {
         if (ar[i] > dr[i]) d--; else a--;
       }
     }
-    return { a, d, lostA: start.a - a, lostD: start.d - d };
+    return { a, d, burned, lostA: start.a - a, lostD: start.d - d };
   }
 
   function targets(src, h) {
@@ -286,42 +328,84 @@
     const s = S.regions[src], t = S.regions[tgt];
     const n = s.troops - 1;
     const mine = h === S.player;
+    const flying = s.dragons;
     if (t.owner === h) {
       t.troops += n; s.troops = 1; s.acted = true; t.acted = true;
-      if (mine) log(`Mueves ${n} soldados de ${R[src].name} a ${R[tgt].name}.`, 'p');
+      t.dragons = t.dragons.concat(flying); s.dragons = [];
+      if (mine) log(`Mueves ${plural(n, 'soldado', 'soldados')}${flying.length ? ' y ' + flying.join(', ') : ''} de ${R[src].name} a ${R[tgt].name}.`, 'p');
       return;
     }
-    const prev = t.owner, def = t.troops;
-    const res = battle(n, def, h, prev, tgt);
+    const prev = t.owner, def = t.troops, defDragons = t.dragons.slice();
+    const res = battle(n, def, h, prev, tgt, flying.length, defDragons.length);
     s.acted = true;
     const who = mine ? 'Tus ejércitos' : H(h).name;
     const involved = mine || prev === S.player;
+    const kind = involved ? 'p' : '';
+    const fallen = [];
+    if (res.burned) log(`${flying.join(', ')} ${flying.length > 1 ? 'arrasan' : 'arrasa'} ${R[tgt].name} con fuego: ${plural(res.burned, 'defensor calcinado', 'defensores calcinados')}.`, involved ? 'p' : 'e');
     if (res.d === 0) {
       t.owner = h; t.troops = res.a; t.acted = true; s.troops = 1;
-      log(`${who} ${mine ? 'toman' : 'toma'} ${R[tgt].name} a ${prev === S.player ? 'ti' : H(prev).name}.`, involved ? 'p' : '');
+      t.dragons = flying.slice(); s.dragons = [];
+      log(`${who} ${mine ? 'toman' : 'toma'} ${R[tgt].name} a ${casa(prev)}.`, kind);
+      if (h === 'bolton') S.houses.bolton.gold += 2;
+      if (defDragons.length) {
+        if (h === 'otros') {
+          t.dragons = t.dragons.concat(defDragons);
+          log(`${defDragons.join(', ')} ${defDragons.length > 1 ? 'caen y se alzan' : 'cae y se alza'} con ojos azules: los Otros tienen ${defDragons.length > 1 ? 'dragones' : 'un dragón'} de hielo.`, 'w');
+        } else {
+          const refuge = ADJ[tgt].find(id => S.regions[id].owner === prev);
+          if (refuge) {
+            S.regions[refuge].dragons = S.regions[refuge].dragons.concat(defDragons);
+            log(`${defDragons.join(', ')} ${defDragons.length > 1 ? 'huyen' : 'huye'} a ${R[refuge].name}.`, involved ? 'p' : 'e');
+          } else {
+            S.deadDragons.push(...defDragons);
+            log(`${defDragons.join(', ')} ${defDragons.length > 1 ? 'mueren' : 'muere'} defendiendo ${R[tgt].name}.`, involved ? 'p' : 'e');
+          }
+        }
+      }
       if (HOUSES[prev] && !alive(prev)) log(`La Casa ${H(prev).name} ha sido extinguida.`, 'e');
     } else {
       t.troops = res.d; s.troops = 1;
-      log(`${who} ${mine ? 'fracasan' : 'fracasa'} ante ${R[tgt].name}${prev === S.player ? ', que resiste en tu nombre' : ''}.`, involved ? 'p' : '');
+      s.dragons = flying.filter(name => {
+        if (Math.random() < 0.3) { fallen.push(name); return false; }
+        return true;
+      });
+      log(`${who} ${mine ? 'fracasan' : 'fracasa'} ante ${R[tgt].name}${prev === S.player ? ', que resiste en tu nombre' : ''}.`, kind);
+      S.deadDragons.push(...fallen);
+      if (fallen.length) log(`Un escorpión abate a ${fallen.join(' y ')} sobre ${R[tgt].name}.`, involved ? 'p' : 'e');
     }
     if (involved) {
-      S.battle = { src, tgt, h, prev, att: n, def, ...res, won: res.d === 0 };
+      S.battle = { src, tgt, h, prev, att: n, def, ...res, won: res.d === 0, dragons: flying.length, fallen };
       S.hit = tgt;
     }
   }
 
+  function hatch(h, id) {
+    const hs = S.houses[h];
+    if (h !== 'targaryen' || hs.gold < HATCH_COST || dragonsOf(h) >= MAX_DRAGONS) return false;
+    const used = new Set(IDS.flatMap(r => S.regions[r].dragons).concat(S.deadDragons));
+    const name = DRAGON_NAMES.find(n => !used.has(n)) || 'Dragón sin nombre';
+    hs.gold -= HATCH_COST;
+    S.regions[id].dragons.push(name);
+    log(`Un huevo eclosiona en ${R[id].name}: nace ${name}.`, h === S.player ? 'p' : 'e');
+    return true;
+  }
+
   // ---------- Partida ----------
   function newGame(player) {
+    const c = DIFF[chosenDiff];
     const regions = {};
-    IDS.forEach(id => regions[id] = { owner: 'neutral', troops: R[id].neu, acted: false });
+    IDS.forEach(id => regions[id] = { owner: 'neutral', troops: R[id].neu, acted: false, dragons: [] });
     const houses = {};
     Object.keys(HOUSES).forEach(h => {
-      regions[HOUSES[h].seat].owner = h;
-      regions[HOUSES[h].seat].troops = 6;
-      houses[h] = { gold: 2 };
+      const seat = regions[HOUSES[h].seat];
+      seat.owner = h;
+      seat.troops = h === 'targaryen' ? 4 : 6;
+      houses[h] = { gold: h === player ? c.startGold : 2 };
     });
-    S = { player, turn: 1, houses, regions, selected: null, log: [], battle: null, hit: null, winter: false, over: null, msg: '' };
-    log(`La Casa ${H(player).name} reclama el Trono de Hierro. Empieza el juego.`, 'p');
+    regions.rocadragon.dragons = ['Drogon', 'Rhaegal', 'Viserion'];
+    S = { player, diff: chosenDiff, turn: 1, houses, regions, selected: null, log: [], battle: null, hit: null, winter: false, over: null, msg: '', deadDragons: [] };
+    log(`La Casa ${H(player).name} reclama el Trono de Hierro (${c.label}). Empieza el juego.`, 'p');
     beginPlayerTurn();
     showGame();
   }
@@ -334,25 +418,31 @@
   }
 
   function aiTurn(h) {
-    const hs = S.houses[h];
+    const hs = S.houses[h], c = cfg();
     owned(h).forEach(id => S.regions[id].acted = false);
-    hs.gold += income(h);
-    const threat = id => ADJ[id].filter(n => S.regions[n].owner !== h).reduce((s, n) => s + S.regions[n].troops, 0);
+    hs.gold += Math.round(income(h) * c.aiGold);
+    const threat = id => ADJ[id].filter(n => S.regions[n].owner !== h).reduce((s, n) => s + S.regions[n].troops + 2 * S.regions[n].dragons.length, 0);
     const opportunity = id => ADJ[id].some(n => S.regions[n].owner !== h);
+    if (h === 'targaryen') {
+      const best = owned(h).sort((a, b) => S.regions[b].troops - S.regions[a].troops)[0];
+      if (best) hatch(h, best);
+    }
     while (hs.gold >= cost(h)) {
       const front = owned(h).filter(opportunity);
       const pool = front.length ? front : owned(h);
       if (!pool.length) break;
       pool.sort((a, b) => (threat(b) - S.regions[b].troops) - (threat(a) - S.regions[a].troops));
-      S.regions[pool[0]].troops += 2; hs.gold -= cost(h);
+      S.regions[pool[0]].troops += levy(h); hs.gold -= cost(h);
     }
     for (let k = 0; k < 5; k++) {
       let best = null;
       for (const s of owned(h)) for (const t of targets(s, h)) {
         const tr = S.regions[t];
         if (tr.owner === h) continue;
-        const a = S.regions[s].troops - 1, d = tr.troops + defBonus(tr.owner, t);
-        if (a < d + 2) continue;
+        const sr = S.regions[s];
+        const a = sr.troops - 1 + 2 * sr.dragons.length;
+        const d = tr.troops + defBonus(tr.owner, t) + 2 * tr.dragons.length;
+        if (a < d + c.margin) continue;
         const score = a / (d + 1) + (t === 'desembarco' ? 0.8 : 0) + (tr.owner === S.player ? 0.25 : 0) + R[t].inc * 0.06 - (tr.owner === 'otros' ? 0.5 : 0);
         if (!best || score > best.score) best = { s, t, score };
       }
@@ -373,14 +463,14 @@
   function othersTurn() {
     const mine = owned('otros');
     if (!mine.length) return;
-    mine.forEach(id => { S.regions[id].acted = false; S.regions[id].troops += id === 'mas_alla' ? 4 : 1; });
+    mine.forEach(id => { S.regions[id].acted = false; S.regions[id].troops += id === 'mas_alla' ? cfg().otrosGrow : 1; });
     for (let k = 0; k < 3; k++) {
       let best = null;
       for (const s of owned('otros')) for (const t of targets(s, 'otros')) {
         const tr = S.regions[t];
         if (tr.owner === 'otros') continue;
-        const a = S.regions[s].troops - 1;
-        if (a < tr.troops + 1) continue;
+        const a = S.regions[s].troops - 1 + 2 * S.regions[s].dragons.length;
+        if (a < tr.troops + 1 + 2 * tr.dragons.length) continue;
         const score = a - tr.troops - R[t].y / 400;
         if (!best || score > best.score) best = { s, t, score };
       }
@@ -395,14 +485,14 @@
     () => { const hs = Object.keys(HOUSES).filter(alive).sort((a, b) => owned(b).length - owned(a).length);
       const h = hs[0]; if (!h) return false; const id = owned(h).sort((a, b) => S.regions[b].troops - S.regions[a].troops)[0];
       const r = S.regions[id]; const lost = Math.floor(r.troops / 2); if (lost < 1) return false; r.troops -= lost;
-      log(`Traición en un banquete: ${h === S.player ? 'pierdes' : 'la Casa ' + H(h).name + ' pierde'} ${lost} soldados en ${R[id].name}.`, 'e'); },
+      log(`Traición en un banquete en Los Gemelos: ${h === S.player ? 'pierdes' : 'la Casa ' + H(h).name + ' pierde'} ${lost} soldados en ${R[id].name}.`, 'e'); },
     () => { let any = false; Object.keys(HOUSES).forEach(h => { if (S.houses[h].gold >= 8) { S.houses[h].gold -= 3; any = true; } });
       if (!any) return false; log('El Banco de Hierro de Braavos cobra sus deudas: las casas con 8 de oro o más pagan 3.', 'e'); },
     () => { const r = S.regions.desembarco; if (r.troops < 3) return false; r.troops -= 2;
       log('Fuego valyrio estalla en Desembarco del Rey: la guarnición pierde 2 soldados.', 'e'); },
     () => { const hs = Object.keys(HOUSES).filter(alive); const h = hs[Math.floor(Math.random() * hs.length)];
       const own = owned(h); const id = own[Math.floor(Math.random() * own.length)]; S.regions[id].troops += 4;
-      log(`La Compañía Dorada desembarca y se vende a ${h === S.player ? 'ti' : 'la Casa ' + H(h).name}: +4 soldados en ${R[id].name}.`, 'e'); },
+      log(`La Compañía Dorada desembarca y se vende a ${casa(h)}: +4 soldados en ${R[id].name}.`, 'e'); },
   ];
 
   function endTurn() {
@@ -419,11 +509,12 @@
       if (checkEnd()) return render();
     }
     S.turn++;
-    if (S.turn === WINTER_TURN) {
+    const W = cfg().winter;
+    if (S.turn === W) {
       S.winter = true;
-      const r = S.regions.mas_alla; r.owner = 'otros'; r.troops = 12;
-      log('Ha llegado el invierno. Los Otros se alzan Más Allá del Muro con 12 caminantes.', 'w');
-    } else if (S.turn === WINTER_TURN - 2) {
+      const r = S.regions.mas_alla; r.owner = 'otros'; r.troops = cfg().otros;
+      log(`Ha llegado el invierno. Los Otros se alzan Más Allá del Muro con ${cfg().otros} caminantes.`, 'w');
+    } else if (S.turn === W - 2) {
       log('Los cuervos blancos vuelan desde la Ciudadela: el invierno llegará en 2 turnos.', 'w');
     }
     if (S.turn > 2 && Math.random() < 0.4) {
@@ -439,12 +530,13 @@
     if (S.over) return true;
     const p = S.player;
     const throne = S.regions.desembarco.owner;
+    const total = IDS.length;
     if (throne === 'otros') {
       S.over = { win: false, title: 'La Larga Noche', text: 'Los Otros han tomado Desembarco del Rey. Ninguna casa gobernará sobre un reino de hielo.' };
     } else if (!alive(p)) {
       S.over = { win: false, title: 'Tu casa ha caído', text: `La Casa ${H(p).name} ha perdido su último bastión en el turno ${S.turn}. Los bardos cantarán su nombre, o lo olvidarán.` };
     } else if (throne === p && owned(p).length >= GOAL) {
-      S.over = { win: true, title: 'Larga vida al rey', text: `La Casa ${H(p).name} se sienta en el Trono de Hierro tras ${S.turn} turnos, con ${owned(p).length} de 16 regiones bajo su estandarte.` };
+      S.over = { win: true, title: 'Larga vida al rey', text: `La Casa ${H(p).name} se sienta en el Trono de Hierro tras ${S.turn} turnos en modo ${cfg().label.toLowerCase()}, con ${owned(p).length} de ${total} regiones bajo su estandarte.` };
     } else if (HOUSES[throne] && owned(throne).length >= GOAL) {
       S.over = { win: false, title: `Reina la Casa ${H(throne).name}`, text: `La Casa ${H(throne).name} ha unido ${owned(throne).length} regiones bajo el Trono de Hierro. Tu casa tendrá que doblar la rodilla.` };
     }
@@ -474,13 +566,19 @@
     const id = S.selected, h = S.player;
     if (!id || S.regions[id].owner !== h || S.houses[h].gold < cost(h)) return;
     S.houses[h].gold -= cost(h);
-    S.regions[id].troops += 2;
-    log(`Reclutas 2 soldados en ${R[id].name}.`, 'p');
+    S.regions[id].troops += levy(h);
+    log(`Reclutas ${levy(h)} soldados en ${R[id].name}.`, 'p');
     render();
   }
 
+  function playerHatch() {
+    const id = S.selected;
+    if (!id || S.regions[id].owner !== S.player) return;
+    if (hatch(S.player, id)) render();
+  }
+
   // ---------- Dibujo ----------
-  const LAND = [[55,25],[345,25],[362,70],[338,110],[352,165],[335,205],[318,250],[285,272],[262,300],[275,335],[330,338],[362,372],[355,410],[322,425],[305,455],[292,468],[318,500],[335,540],[345,590],[318,625],[290,640],[340,665],[372,700],[360,735],[310,748],[240,735],[170,715],[110,705],[55,695],[35,665],[50,630],[40,590],[60,545],[45,510],[55,470],[80,445],[110,430],[125,400],[135,360],[130,330],[115,300],[95,265],[70,220],[85,175],[55,130],[45,80]];
+  const LAND = [[55,25],[345,25],[362,70],[338,110],[352,165],[335,205],[318,250],[285,272],[262,300],[275,335],[330,338],[362,372],[355,410],[322,425],[305,455],[300,475],[318,500],[335,540],[345,590],[318,625],[290,640],[340,665],[372,700],[360,735],[310,748],[240,735],[170,715],[110,705],[55,695],[35,665],[50,630],[40,590],[60,545],[45,510],[55,470],[80,445],[110,430],[125,400],[135,360],[130,330],[115,300],[95,265],[70,220],[85,175],[55,130],[45,80]];
 
   function drawStatic() {
     const pts = LAND.map(p => p.join(',')).join(' ');
@@ -529,36 +627,45 @@
     });
   }
 
+  function dragonBadge(x, y, n, ice) {
+    const fill = ice ? '#9be4ff' : '#e24b2b', ink = ice ? '#0b2733' : '#fff';
+    return `<g pointer-events="none">
+      <path d="M${x} ${y - 9} L${x + 9} ${y} L${x} ${y + 9} L${x - 9} ${y} Z" fill="${fill}" stroke="#0c1d24" stroke-width="1.5"/>
+      <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-size="10" font-weight="800" fill="${ink}">${n}</text></g>`;
+  }
+
   function drawNodes() {
     const tg = S.selected ? targets(S.selected, S.player) : [];
     $('nodes').innerHTML = IDS.map(id => {
       const r = S.regions[id], c = H(r.owner), P = R[id];
       const isSel = S.selected === id, isT = tg.includes(id);
       const dim = r.owner === S.player && r.acted;
-      const below = 31;
       const anchor = id === 'rocadragon' ? 'end' : id === 'islas_hierro' ? 'start' : 'middle';
       const lx = id === 'rocadragon' ? P.x + 18 : id === 'islas_hierro' ? P.x - 38 : P.x;
       const tLabel = isT ? (r.owner === S.player ? ', mover tropas aquí' : ', atacar') : '';
-      return `<g class="node${isT ? ' target' : ''}${S.hit === id ? ' hit' : ''}" data-id="${id}" tabindex="0" role="button" aria-label="${esc(P.name)}, ${esc(c.name)}, ${r.troops} soldados${tLabel}">
+      const nd = r.dragons.length;
+      return `<g class="node${isT ? ' target' : ''}${S.hit === id ? ' hit' : ''}" data-id="${id}" tabindex="0" role="button" aria-label="${esc(P.name)}, ${esc(c.name)}, ${r.troops} soldados${nd ? ', ' + plural(nd, 'dragón', 'dragones') : ''}${tLabel}">
         ${id === 'desembarco' ? `<circle cx="${P.x}" cy="${P.y}" r="24" fill="none" stroke="#d6b35c" stroke-width="1.5" stroke-dasharray="2 3"/>` : ''}
         ${isT ? `<circle class="halo" cx="${P.x}" cy="${P.y}" r="23" fill="none" stroke="${r.owner === S.player ? '#86c77a' : '#e0654e'}" stroke-width="3"/>` : ''}
         <circle cx="${P.x}" cy="${P.y}" r="26" fill="transparent"/>
         <circle class="ring" cx="${P.x}" cy="${P.y}" r="17" fill="${c.color}" fill-opacity="${dim ? .55 : 1}" stroke="${isSel ? '#ffffff' : c.stroke}" stroke-width="${isSel ? 3.5 : 2}"/>
         <text class="num" x="${P.x}" y="${P.y + 5}" text-anchor="middle" fill="${c.text}">${r.troops}</text>
         <text class="gold" x="${P.x + 13}" y="${P.y - 13}" text-anchor="middle">${P.inc}</text>
-        <text class="lbl" x="${lx}" y="${P.y + below}" text-anchor="${anchor}">${esc(P.name)}</text>
+        ${nd ? dragonBadge(P.x - 15, P.y - 14, nd, r.owner === 'otros') : ''}
+        <text class="lbl" x="${lx}" y="${P.y + 31}" text-anchor="${anchor}">${esc(P.name)}</text>
       </g>`;
     }).join('');
   }
 
   function drawSide() {
-    const p = S.player, hp = H(p), hs = S.houses[p];
+    const p = S.player, hp = H(p), hs = S.houses[p], c = cfg();
     const sel = S.selected, sr = sel ? S.regions[sel] : null;
-    const toWinter = WINTER_TURN - S.turn;
+    const W = c.winter;
+    const toWinter = W - S.turn;
     const seasonText = S.winter ? 'Invierno. Los Otros avanzan hacia el sur.'
-      : toWinter <= 2 ? `Otoño. El invierno llega en ${toWinter} ${toWinter === 1 ? 'turno' : 'turnos'}.`
-      : `Verano. El invierno llega en el turno ${WINTER_TURN}.`;
-    const pct = Math.min(100, (S.turn - 1) / (WINTER_TURN - 1) * 100);
+      : toWinter <= 2 ? `Otoño. El invierno llega en ${plural(toWinter, 'turno', 'turnos')}.`
+      : `Verano. El invierno llega en el turno ${W}.`;
+    const pct = Math.min(100, (S.turn - 1) / (W - 1) * 100);
 
     let selHtml;
     if (!sel) {
@@ -568,18 +675,24 @@
       const tg = targets(sel, p);
       let hint = '';
       if (S.msg) hint = `<p class="hint warn">${esc(S.msg)}</p>`;
-      else if (own && tg.length) hint = `<p class="hint">Toca una región con halo rojo para atacar o verde para mover. Avanzan ${sr.troops - 1} soldados.</p>`;
+      else if (own && tg.length) hint = `<p class="hint">Toca una región con halo rojo para atacar o verde para mover. Avanzan ${sr.troops - 1} soldados${sr.dragons.length ? ' y ' + plural(sr.dragons.length, 'dragón', 'dragones') : ''}.</p>`;
       else if (own && sr.acted) hint = `<p class="hint">Esta región ya actuó en este turno. Aún puedes reclutar aquí.</p>`;
-      else if (own) hint = `<p class="hint">Necesitas al menos 2 soldados para salir de aquí.</p>`;
+      else if (own) hint = `<p class="hint">Necesitas al menos 2 soldados para salir de aquí${sr.dragons.length ? ': los dragones solo vuelan con un ejército' : ''}.</p>`;
       else {
         const fromHere = IDS.filter(id => S.regions[id].owner === p && targets(id, p).includes(sel));
-        hint = `<p class="hint">${fromHere.length ? `Puedes atacarla desde ${fromHere.map(id => R[id].name).join(', ')}.` : 'Ninguna de tus regiones puede atacarla este turno.'} Defensa extra: +${defBonus(sr.owner, sel)}.</p>`;
+        hint = `<p class="hint">${fromHere.length ? `Puedes atacarla desde ${fromHere.map(id => R[id].name).join(', ')}.` : 'Ninguna de tus regiones puede atacarla este turno.'} Defensa extra: +${defBonus(sr.owner, sel) + Math.min(2, sr.dragons.length)}.</p>`;
       }
+      const dragonLine = sr.dragons.length ? `<div class="sel-meta">${sr.owner === 'otros' ? 'Dragones de hielo' : 'Dragones'}: ${esc(sr.dragons.join(', '))}</div>` : '';
+      const canHatch = p === 'targaryen' && own;
       selHtml = `
         <div class="sel-name">${esc(R[sel].name)}</div>
         <div class="sel-meta"><span class="chip" style="background:${H(sr.owner).color}"></span>${esc(H(sr.owner).name)} · ${sr.troops} soldados · rinde ${R[sel].inc} de oro${sel === 'desembarco' ? ' · sede del Trono' : ''}</div>
+        ${dragonLine}
         ${hint}
-        ${own ? `<div class="btns"><button class="act" id="btn-recruit" type="button" ${hs.gold < cost(p) ? 'disabled' : ''}>Reclutar 2 soldados · ${cost(p)} oro</button></div>` : ''}`;
+        ${own ? `<div class="btns">
+          <button class="act" id="btn-recruit" type="button" ${hs.gold < cost(p) ? 'disabled' : ''}>Reclutar ${levy(p)} soldados · ${cost(p)} oro</button>
+          ${canHatch ? `<button class="act" id="btn-hatch" type="button" ${hs.gold < HATCH_COST || dragonsOf(p) >= MAX_DRAGONS ? 'disabled' : ''}>Eclosionar huevo · ${HATCH_COST} oro</button>` : ''}
+        </div>${canHatch && dragonsOf(p) >= MAX_DRAGONS ? `<p class="hint">Ya tienes ${MAX_DRAGONS} dragones vivos.</p>` : ''}` : ''}`;
     }
 
     let battleHtml = '';
@@ -589,14 +702,15 @@
       const good = mine ? b.won : !b.won;
       battleHtml = `<div class="box battle"><h3>Último combate</h3>
         <div class="res ${good ? 'win' : 'lose'}">${mine ? (b.won ? 'Victoria' : 'Derrota') : (b.won ? 'Has perdido una región' : 'Has resistido')}</div>
-        <div>${esc(H(b.h).name)} atacó ${esc(R[b.tgt].name)} con ${b.att} contra ${b.def}. Bajas: ${b.lostA} atacantes y ${b.lostD} defensores.</div></div>`;
+        <div>${esc(H(b.h).name)} atacó ${esc(R[b.tgt].name)} con ${b.att}${b.dragons ? ' y ' + plural(b.dragons, 'dragón', 'dragones') : ''} contra ${b.def}. Bajas: ${b.lostA} atacantes y ${b.lostD} defensores${b.burned ? `, ${b.burned} por fuego de dragón` : ''}.${b.fallen.length ? ` Caído: ${esc(b.fallen.join(', '))}.` : ''}</div></div>`;
     }
 
     const rows = [...Object.keys(HOUSES), 'otros'].filter(h => h !== 'otros' || S.winter)
-      .map(h => ({ h, n: owned(h).length, t: troopsOf(h) }))
+      .map(h => ({ h, n: owned(h).length, t: troopsOf(h), d: dragonsOf(h) }))
       .sort((a, b) => b.n - a.n || b.t - a.t)
-      .map(({ h, n, t }) => `<tr class="${n ? '' : 'dead'} ${h === p ? 'you' : ''}"><td><span class="chip" style="background:${H(h).color};box-shadow:0 0 0 1px ${H(h).stroke}"></span>${esc(H(h).name)}</td><td>${n}</td><td>${t}</td></tr>`).join('');
+      .map(({ h, n, t, d }) => `<tr class="${n ? '' : 'dead'} ${h === p ? 'you' : ''}"><td><span class="chip" style="background:${H(h).color};box-shadow:0 0 0 1px ${H(h).stroke}"></span>${esc(H(h).name)}</td><td>${n}</td><td>${t}</td><td>${d || '·'}</td></tr>`).join('');
 
+    const throneOwner = S.regions.desembarco.owner;
     $('side').innerHTML = `
       <div class="box">
         <div class="me">${shield(p)}<div><div class="hname">Casa ${esc(hp.name)}</div><div class="motto">${esc(hp.motto)}</div></div></div>
@@ -613,18 +727,19 @@
       ${battleHtml}
       <div class="btns"><button class="act primary" id="btn-end" type="button">Terminar turno ${S.turn}</button></div>
       <div class="box"><h3>Casas de Westeros</h3>
-        <table class="rank"><thead><tr><th>Casa</th><th>Regiones</th><th>Tropas</th></tr></thead><tbody>${rows}</tbody></table>
-        <p class="hint">El Trono: ${S.regions.desembarco.owner === 'neutral' ? 'vacío, en manos de la guardia de la ciudad' : 'Casa ' + esc(H(S.regions.desembarco.owner).name).replace('Casa Los Otros', 'Los Otros')}.</p>
+        <table class="rank"><thead><tr><th>Casa</th><th>Regiones</th><th>Tropas</th><th>Dragones</th></tr></thead><tbody>${rows}</tbody></table>
+        <p class="hint">El Trono: ${throneOwner === 'neutral' ? 'vacío, en manos de la guardia de la ciudad' : throneOwner === 'otros' ? 'Los Otros' : 'Casa ' + esc(H(throneOwner).name)}.</p>
       </div>
       <div class="box"><h3>Crónica</h3><ol class="log">${S.log.slice(0, 20).map(l => `<li class="${l.kind}">${esc(l.text)}</li>`).join('')}</ol></div>`;
 
     const rb = $('btn-recruit'); if (rb) rb.addEventListener('click', recruit);
+    const hb = $('btn-hatch'); if (hb) hb.addEventListener('click', playerHatch);
     $('btn-end').addEventListener('click', endTurn);
   }
 
   function render() {
     if (!S) return;
-    $('season').innerHTML = `Turno <b>${S.turn}</b> · ${S.winter ? '<b style="color:var(--ice)">Invierno</b>' : 'Verano'}`;
+    $('season').innerHTML = `Turno <b>${S.turn}</b> · ${S.winter ? '<b style="color:var(--ice)">Invierno</b>' : 'Verano'} · ${cfg().label}`;
     drawNodes();
     drawSide();
     const ov = $('overlay');
@@ -646,10 +761,16 @@
     $('overlay').hidden = true;
     $('game').hidden = true;
     $('intro').hidden = false;
-    $('season').innerHTML = 'Siete casas · <b>16 regiones</b> · un trono';
+    $('season').innerHTML = `${Object.keys(HOUSES).length} casas · <b>${IDS.length} regiones</b> · un trono`;
   }
 
   function start(data) {
+    $('diff').innerHTML = Object.keys(DIFF).map(k => `<label><input type="radio" name="diff" id="diff-${k}" value="${k}" ${k === chosenDiff ? 'checked' : ''}><b>${DIFF[k].label}</b><span>${DIFF[k].desc}</span></label>`).join('');
+    $('diff').addEventListener('change', e => {
+      if (!DIFF[e.target.value]) return;
+      chosenDiff = e.target.value;
+      try { localStorage.setItem('westeros-diff', chosenDiff); } catch (err) {}
+    });
     $('houses').innerHTML = Object.keys(HOUSES).map(h => {
       const c = HOUSES[h];
       return `<button class="house-card" type="button" data-h="${h}">${shield(h)}<span class="hname">${c.name}</span><span class="motto">${c.sigil} · «${c.motto}»</span><span class="perk">${c.perk}</span></button>`;
@@ -657,7 +778,7 @@
     $('houses').addEventListener('click', e => { const b = e.target.closest('.house-card'); if (b) newGame(b.dataset.h); });
     $('ov-again').addEventListener('click', showIntro);
     drawStatic();
-    if (data && data.state) { S = data.state; showGame(); } else showIntro();
+    if (data && data.state && data.state.diff && data.state.regions.gemelos) { S = data.state; showGame(); } else showIntro();
     try { window.claude?.hot?.snapshot?.(() => ({ state: S })); } catch (e) {}
   }
 
