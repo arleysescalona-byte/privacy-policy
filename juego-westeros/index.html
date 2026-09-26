@@ -139,7 +139,22 @@
   .overlay p { margin: 0; color: var(--ink); }
   .overlay .btns { justify-content: center; }
 
+  .resume { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 14px; border: 1px solid var(--gold); border-radius: 6px; background: var(--panel); }
+  .resume p { margin: 0; flex: 1 1 220px; }
+  .mbar { display: none; }
   @media (max-width: 860px) {
+    body.playing { padding-bottom: 130px; }
+    .mbar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+      display: grid; gap: 8px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+      background: var(--panel); border-top: 1px solid var(--gold); box-shadow: 0 -6px 20px rgba(0, 0, 0, .4);
+    }
+    .mbar .info { font-size: 14px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 12px; }
+    .mbar .info b { color: var(--ink); }
+    .mbar .info .win { color: var(--ok); }
+    .mbar .info .lose { color: var(--blood); }
+    .mbar .btns { flex-wrap: nowrap; }
+    .mbar button.act { flex: 1 1 0; padding: 11px 8px; font-size: 14px; }
     .game { grid-template-columns: 1fr; }
     .mapwrap { position: static; }
     #map { max-height: none; }
@@ -160,6 +175,7 @@
   </header>
 
   <section class="intro" id="intro">
+    <div class="resume" id="resume" hidden></div>
     <div class="step">
       <h2>1. Elige la dificultad</h2>
       <div class="diff" id="diff" role="radiogroup" aria-label="Dificultad"></div>
@@ -170,7 +186,7 @@
     </div>
     <div class="rules">
       <div><b>Objetivo</b>Controla Desembarco del Rey y al menos 10 de las 18 regiones al terminar una acción.</div>
-      <div><b>Tu turno</b>Toca una región tuya, luego una vecina resaltada: si es tuya mueves tropas, si no, atacas con todas menos una.</div>
+      <div><b>Tu turno</b>Toca una región tuya, luego una vecina resaltada: si es tuya mueves tropas, si no, atacas con todas menos una. En los turnos 1 y 2 hay tregua entre las grandes casas.</div>
       <div><b>Oro</b>Cada región rinde oro al inicio del turno. Gástalo en reclutar soldados en la región que elijas.</div>
       <div><b>Dragones</b>Los Targaryen empiezan con 3. Vuelan con el ejército, queman 1 defensor cada uno antes del choque y suman a los dados. Un escorpión puede abatirlos si el ataque fracasa.</div>
       <div><b>El invierno</b>Los Otros cruzan desde Más Allá del Muro (turno 8 a 11 según la dificultad). Si capturan un dragón, lo convierten en dragón de hielo. Si toman Desembarco, todos pierden.</div>
@@ -183,6 +199,8 @@
   </main>
 </div>
 
+<div class="mbar" id="mbar" hidden></div>
+
 <div class="overlay" id="overlay" hidden>
   <div class="card">
     <h2 id="ov-title"></h2>
@@ -194,6 +212,7 @@
 <script>
 (() => {
   const GOAL = 10;
+  const TRUCE = 2; // turnos en los que las grandes casas no pueden atacarse entre sí
   const HATCH_COST = 10;
   const MAX_DRAGONS = 3;
   const DRAGON_NAMES = ['Drogon', 'Rhaegal', 'Viserion', 'Balerion', 'Meraxes', 'Vhagar', 'Syrax', 'Caraxes', 'Vermithor'];
@@ -296,6 +315,7 @@
   function atkBonus(h) { return h === 'baratheon' || h === 'bolton' || h === 'otros' ? 1 : 0; }
   function defBonus(h, rid) {
     let b = R[rid].fort || 0;
+    if (HOUSES[h] && HOUSES[h].seat === rid) b += 1; // sede ancestral
     if (h === 'stark' || h === 'otros') b += 1;
     if (h === 'arryn') b += rid === 'nido_aguilas' ? 3 : 1;
     if (h === 'martell' && DORNE.includes(rid)) b += 2;
@@ -319,8 +339,9 @@
   function targets(src, h) {
     const s = S.regions[src];
     if (!s || s.owner !== h || s.acted || s.troops < 2) return [];
-    const list = ADJ[src].slice();
+    let list = ADJ[src].slice();
     if (h === 'greyjoy' && WEST.includes(src)) WEST.forEach(w => { if (w !== src && !list.includes(w)) list.push(w); });
+    if (S.turn <= TRUCE) list = list.filter(id => { const o = S.regions[id].owner; return o === h || !HOUSES[o]; });
     return list;
   }
 
@@ -662,7 +683,8 @@
     const sel = S.selected, sr = sel ? S.regions[sel] : null;
     const W = c.winter;
     const toWinter = W - S.turn;
-    const seasonText = S.winter ? 'Invierno. Los Otros avanzan hacia el sur.'
+    const seasonText = S.turn <= TRUCE ? `Tregua del rey: ninguna gran casa puede atacar a otra hasta el turno ${TRUCE + 1}. Conquista tierras neutrales y prepara tu defensa.`
+      : S.winter ? 'Invierno. Los Otros avanzan hacia el sur.'
       : toWinter <= 2 ? `Otoño. El invierno llega en ${plural(toWinter, 'turno', 'turnos')}.`
       : `Verano. El invierno llega en el turno ${W}.`;
     const pct = Math.min(100, (S.turn - 1) / (W - 1) * 100);
@@ -680,7 +702,8 @@
       else if (own) hint = `<p class="hint">Necesitas al menos 2 soldados para salir de aquí${sr.dragons.length ? ': los dragones solo vuelan con un ejército' : ''}.</p>`;
       else {
         const fromHere = IDS.filter(id => S.regions[id].owner === p && targets(id, p).includes(sel));
-        hint = `<p class="hint">${fromHere.length ? `Puedes atacarla desde ${fromHere.map(id => R[id].name).join(', ')}.` : 'Ninguna de tus regiones puede atacarla este turno.'} Defensa extra: +${defBonus(sr.owner, sel) + Math.min(2, sr.dragons.length)}.</p>`;
+        const truce = S.turn <= TRUCE && HOUSES[sr.owner];
+        hint = `<p class="hint">${truce ? `Hay tregua con las grandes casas hasta el turno ${TRUCE + 1}.` : fromHere.length ? `Puedes atacarla desde ${fromHere.map(id => R[id].name).join(', ')}.` : 'Ninguna de tus regiones puede atacarla este turno.'} Defensa extra: +${defBonus(sr.owner, sel) + Math.min(2, sr.dragons.length)}.</p>`;
       }
       const dragonLine = sr.dragons.length ? `<div class="sel-meta">${sr.owner === 'otros' ? 'Dragones de hielo' : 'Dragones'}: ${esc(sr.dragons.join(', '))}</div>` : '';
       const canHatch = p === 'targaryen' && own;
@@ -725,7 +748,7 @@
       </div>
       <div class="box"><h3>Región elegida</h3>${selHtml}</div>
       ${battleHtml}
-      <div class="btns"><button class="act primary" id="btn-end" type="button">Terminar turno ${S.turn}</button></div>
+      <div class="btns"><button class="act primary" id="btn-end" type="button">Terminar turno ${S.turn}</button><button class="act" id="btn-menu" type="button">Menú (se guarda la partida)</button></div>
       <div class="box"><h3>Casas de Westeros</h3>
         <table class="rank"><thead><tr><th>Casa</th><th>Regiones</th><th>Tropas</th><th>Dragones</th></tr></thead><tbody>${rows}</tbody></table>
         <p class="hint">El Trono: ${throneOwner === 'neutral' ? 'vacío, en manos de la guardia de la ciudad' : throneOwner === 'otros' ? 'Los Otros' : 'Casa ' + esc(H(throneOwner).name)}.</p>
@@ -735,6 +758,7 @@
     const rb = $('btn-recruit'); if (rb) rb.addEventListener('click', recruit);
     const hb = $('btn-hatch'); if (hb) hb.addEventListener('click', playerHatch);
     $('btn-end').addEventListener('click', endTurn);
+    $('btn-menu').addEventListener('click', showIntro);
   }
 
   function render() {
@@ -742,6 +766,8 @@
     $('season').innerHTML = `Turno <b>${S.turn}</b> · ${S.winter ? '<b style="color:var(--ice)">Invierno</b>' : 'Verano'} · ${cfg().label}`;
     drawNodes();
     drawSide();
+    drawMobileBar();
+    save();
     const ov = $('overlay');
     if (S.over) {
       $('ov-title').textContent = S.over.title;
@@ -750,9 +776,46 @@
     } else ov.hidden = true;
   }
 
+  function drawMobileBar() {
+    const p = S.player, hs = S.houses[p], sel = S.selected, sr = sel ? S.regions[sel] : null;
+    const own = sr && sr.owner === p;
+    let status = sel ? `<span><b>${esc(R[sel].name)}</b> · ${sr.troops} soldados${sr.dragons.length ? ' · ' + plural(sr.dragons.length, 'dragón', 'dragones') : ''}</span>` : '<span>Toca una región tuya</span>';
+    if (S.battle) {
+      const b = S.battle, good = b.h === p ? b.won : !b.won;
+      status += `<span class="${good ? 'win' : 'lose'}">${b.h === p ? (b.won ? 'Victoria en ' : 'Derrota en ') : (b.won ? 'Perdiste ' : 'Resististe en ')}${esc(R[b.tgt].name)}</span>`;
+    }
+    $('mbar').innerHTML = `
+      <div class="info"><span><b>${hs.gold}</b> oro · <b>${owned(p).length}/${GOAL}</b> regiones</span>${status}</div>
+      <div class="btns">
+        <button class="act" id="m-recruit" type="button" ${own && hs.gold >= cost(p) ? '' : 'disabled'}>Reclutar ${levy(p)} · ${cost(p)} oro</button>
+        ${p === 'targaryen' ? `<button class="act" id="m-hatch" type="button" ${own && hs.gold >= HATCH_COST && dragonsOf(p) < MAX_DRAGONS ? '' : 'disabled'}>Huevo · ${HATCH_COST}</button>` : ''}
+        <button class="act primary" id="m-end" type="button">Terminar turno</button>
+      </div>`;
+    $('m-recruit').addEventListener('click', recruit);
+    const mh = $('m-hatch'); if (mh) mh.addEventListener('click', playerHatch);
+    $('m-end').addEventListener('click', endTurn);
+  }
+
+  const SAVE_KEY = 'westeros-partida';
+  function save() {
+    try {
+      if (S && !S.over) localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+      else localStorage.removeItem(SAVE_KEY);
+    } catch (e) {}
+  }
+  function loadSave() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null');
+      if (s && s.diff && DIFF[s.diff] && HOUSES[s.player] && s.regions && s.regions.gemelos && !s.over) return s;
+    } catch (e) {}
+    return null;
+  }
+
   function showGame() {
     $('intro').hidden = true;
     $('game').hidden = false;
+    $('mbar').hidden = false;
+    document.body.classList.add('playing');
     render();
   }
 
@@ -760,6 +823,14 @@
     S = null;
     $('overlay').hidden = true;
     $('game').hidden = true;
+    $('mbar').hidden = true;
+    document.body.classList.remove('playing');
+    const saved = loadSave();
+    $('resume').hidden = !saved;
+    if (saved) {
+      $('resume').innerHTML = `<p>Tienes una partida guardada: <b>Casa ${esc(H(saved.player).name)}</b>, turno ${saved.turn}, modo ${DIFF[saved.diff].label.toLowerCase()}.</p><button class="act primary" id="btn-resume" type="button">Continuar partida</button>`;
+      $('btn-resume').addEventListener('click', () => { S = loadSave(); if (S) showGame(); });
+    }
     $('intro').hidden = false;
     $('season').innerHTML = `${Object.keys(HOUSES).length} casas · <b>${IDS.length} regiones</b> · un trono`;
   }
